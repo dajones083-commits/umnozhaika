@@ -96,6 +96,16 @@ class Prefs(context: Context) {
         get() = getS("secret", "2893")
         set(v) = putS("secret", v)
 
+    var autoUpdate: Boolean
+        get() = getB("autoUpdate", true)
+        set(v) = putB("autoUpdate", v)
+
+    var lastUpdateCheck: Long
+        get() = sp.getLong("lastUpdateCheck", 0L)
+        set(v) {
+            sp.edit().putLong("lastUpdateCheck", v).apply()
+        }
+
     // ---------- PIN ----------
     fun pinLockedMs(): Long {
         val r = sp.getLong("pinLockUntil", 0L) - System.currentTimeMillis()

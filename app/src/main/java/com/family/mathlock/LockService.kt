@@ -115,6 +115,8 @@ class LockService : Service(), LockOverlay.Host {
         val locked = Schedule.shouldLock(this, prefs)
         if (locked) showOverlay() else hideOverlay()
 
+        maybeAutoUpdate(locked)
+
         val free = prefs.freeRemainingMs()
         val active = Schedule.isActiveNow(this, prefs)
         if (!locked && active && free in 1L..60_000L && warnedFor != prefs.freeToken()) {
@@ -132,6 +134,15 @@ class LockService : Service(), LockOverlay.Host {
             lastText = text
             getSystemService(NotificationManager::class.java).notify(NOTIF_ID, buildNotification(text))
         }
+    }
+
+    /** Раз в 6 часов проверяем обновление (только когда замок не на экране). */
+    private fun maybeAutoUpdate(locked: Boolean) {
+        if (!prefs.autoUpdate || locked || !screenOn) return
+        val now = System.currentTimeMillis()
+        if (now - prefs.lastUpdateCheck < 6 * 3_600_000L && now >= prefs.lastUpdateCheck) return
+        prefs.lastUpdateCheck = now
+        Updater.checkAndInstall(this, userInitiated = false) { }
     }
 
     private fun showOverlay() {

@@ -43,6 +43,10 @@ class MainActivity : Activity() {
     private lateinit var permBattery: Button
     private lateinit var permAdmin: Button
     private lateinit var permTime: Button
+    private lateinit var permInstall: Button
+    private lateinit var updateBtn: Button
+    private lateinit var updateText: TextView
+    private lateinit var autoUpdateCb: CheckBox
     private lateinit var startBtn: Button
     private lateinit var endBtn: Button
     private lateinit var weekendCb: CheckBox
@@ -146,6 +150,7 @@ class MainActivity : Activity() {
         permBattery = action("") { requestBattery() }
         permAdmin = action("") { requestAdmin() }
         permTime = action("") { safeStart(Intent(Settings.ACTION_DATE_SETTINGS)) }
+        permInstall = action("") { Updater.openInstallPermission(this) }
 
         header("2. Расписание")
         startBtn = action("") { pickTime(true) }
@@ -179,6 +184,16 @@ class MainActivity : Activity() {
         action("💾 Сохранить", C.ACCENT, Color.BLACK) { save() }
         action("🧪 Проверить замок прямо сейчас") { testLock() }
 
+        header("Обновления")
+        updateText = note("")
+        updateBtn = action("🔄 Проверить обновления") {
+            Updater.checkAndInstall(this, userInitiated = true) { s ->
+                updateText.text = s
+            }
+        }
+        autoUpdateCb = check("Обновляться автоматически (проверка раз в 6 часов)", prefs.autoUpdate)
+        autoUpdateCb.setOnCheckedChangeListener { _, on -> prefs.autoUpdate = on }
+
         header("Статистика за сегодня")
         statsText = note("")
     }
@@ -198,6 +213,10 @@ class MainActivity : Activity() {
         setPerm(permBattery, batteryOk, "Работа без ограничений батареи")
         setPerm(permAdmin, adminOk, "Защита от удаления")
         setPerm(permTime, timeOk, "Автоматическое время и часовой пояс")
+        setPerm(permInstall, Updater.canInstall(this), "Установка обновлений")
+        if (updateText.text.isEmpty()) {
+            updateText.text = "Установлена сборка №${Updater.currentVersion(this)}"
+        }
 
         startBtn.text = "Начало блокировки: ${Schedule.fmt(prefs.startMinutes)}"
         endBtn.text = "Конец блокировки: ${Schedule.fmt(prefs.endMinutes)}"
