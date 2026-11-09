@@ -12,6 +12,15 @@ class Prefs(context: Context) {
     private val app = context.applicationContext
     private val sp = app.getSharedPreferences("mathlock", Context.MODE_PRIVATE)
 
+    init {
+        // Разовый переход: старое значение 5 сек на ответ → 10 сек.
+        if (!sp.getBoolean("migr_sec10", false)) {
+            val e = sp.edit().putBoolean("migr_sec10", true)
+            if (sp.getInt("secPerQ", 10) == 5) e.putInt("secPerQ", 10)
+            e.apply()
+        }
+    }
+
     private fun getI(k: String, d: Int): Int = sp.getInt(k, d)
     private fun putI(k: String, v: Int) {
         sp.edit().putInt(k, v).apply()
@@ -45,7 +54,7 @@ class Prefs(context: Context) {
         set(v) = putB("weekendAllDay", v)
 
     var secondsPerQuestion: Int
-        get() = getI("secPerQ", 5)
+        get() = getI("secPerQ", 10)
         set(v) = putI("secPerQ", v)
 
     var minutesPerQuestion: Int
