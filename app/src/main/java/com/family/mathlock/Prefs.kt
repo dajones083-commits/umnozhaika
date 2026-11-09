@@ -41,7 +41,7 @@ class Prefs(context: Context) {
         set(v) = putI("end", v)
 
     var weekendAllDay: Boolean
-        get() = getB("weekendAllDay", false)
+        get() = getB("weekendAllDay", true)
         set(v) = putB("weekendAllDay", v)
 
     var secondsPerQuestion: Int
