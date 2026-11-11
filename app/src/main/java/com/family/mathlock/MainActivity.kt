@@ -44,6 +44,7 @@ class MainActivity : Activity() {
     private lateinit var permAdmin: Button
     private lateinit var permTime: Button
     private lateinit var permInstall: Button
+    private lateinit var autostartBtn: Button
     private lateinit var updateBtn: Button
     private lateinit var updateText: TextView
     private lateinit var autoUpdateCb: CheckBox
@@ -70,6 +71,11 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        // Служба запускается сразу, ещё до ввода PIN: открыть приложение = починить замок.
+        if (prefs.enabled) {
+            LockService.start(this)
+            Watchdog.schedule(this)
+        }
         if (hasCode() && !prefs.recentlyAuthed()) {
             if (!dialogShown) askPin()
             return
@@ -151,6 +157,7 @@ class MainActivity : Activity() {
         permAdmin = action("") { requestAdmin() }
         permTime = action("") { safeStart(Intent(Settings.ACTION_DATE_SETTINGS)) }
         permInstall = action("") { Updater.openInstallPermission(this) }
+        autostartBtn = action("🔁 Автозапуск в фоне (${Build.MANUFACTURER}) — включите вручную") { openAutostart() }
 
         header("2. Расписание")
         startBtn = action("") { pickTime(true) }
@@ -237,7 +244,7 @@ class MainActivity : Activity() {
             Schedule.shouldLock(this, prefs) -> "Сейчас: телефон заблокирован"
             free > 0 && Schedule.isActiveNow(this, prefs) -> "Сейчас: открыто ещё ${(free + 59_999) / 60_000} мин"
             else -> "Сейчас: вне расписания, замок включится в ${Schedule.fmt(prefs.startMinutes)}"
-        }
+        } + (if (LockService.isRunning) "\nСлужба замка: работает ✅" else "\nСлужба замка: запускается…")
         val warn = if (!Schedule.autoTimeOk(this)) "\n⚠ Автовремя выключено — замок действует круглосуточно" else ""
         return main + warn
     }
@@ -254,6 +261,7 @@ class MainActivity : Activity() {
             "Решено примеров: ${prefs.solvedToday}\n" +
             "Ошибок: ${prefs.mistakesToday}\n" +
             "Звонков с замка: ${prefs.callsToday} из ${LockOverlay.MAX_CALLS}\n" +
+            "Система выгружала замок (поднят автоматически): ${prefs.restartsToday} раз\n" +
             "Трудные примеры: " + weak.ifEmpty { "пока нет" }
     }
 
@@ -273,8 +281,10 @@ class MainActivity : Activity() {
             }
             prefs.enabled = true
             LockService.start(this)
+            Watchdog.schedule(this)
         } else {
             prefs.enabled = false
+            Watchdog.cancel(this)
             stopService(Intent(this, LockService::class.java))
         }
         refresh()
@@ -375,6 +385,30 @@ class MainActivity : Activity() {
     }
 
     // ---------------------------------------------------------------- helpers
+
+    /** Экран «Автозапуск» у разных производителей; если не нашёлся — карточка приложения. */
+    private fun openAutostart() {
+        val targets = listOf(
+            "com.miui.securitycenter" to "com.miui.permcenter.autostart.AutoStartManagementActivity",
+            "com.huawei.systemmanager" to "com.huawei.systemmanager.startupmgr.ui.StartupNormalAppListActivity",
+            "com.huawei.systemmanager" to "com.huawei.systemmanager.optimize.process.ProtectActivity",
+            "com.hihonor.systemmanager" to "com.hihonor.systemmanager.startupmgr.ui.StartupNormalAppListActivity",
+            "com.coloros.safecenter" to "com.coloros.safecenter.permission.startup.StartupAppListActivity",
+            "com.oppo.safe" to "com.oppo.safe.permission.startup.StartupAppListActivity",
+            "com.vivo.permissionmanager" to "com.vivo.permissionmanager.activity.BgStartUpManagerActivity",
+            "com.iqoo.secure" to "com.iqoo.secure.ui.phoneoptimize.AddWhiteListActivity",
+            "com.asus.mobilemanager" to "com.asus.mobilemanager.entry.FunctionActivity"
+        )
+        for ((pkg, cls) in targets) {
+            val i = Intent().setComponent(ComponentName(pkg, cls)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            if (safeStart(i)) {
+                toast("Найдите «Умножайку» и включите автозапуск")
+                return
+            }
+        }
+        safeStart(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
+        toast("Батарея → «Без ограничений». На Samsung: Батарея → «Приложения без спящего режима» → добавьте «Умножайку»")
+    }
 
     private fun hasCode(): Boolean = prefs.pin.isNotEmpty() || prefs.secretCode.isNotEmpty()
 

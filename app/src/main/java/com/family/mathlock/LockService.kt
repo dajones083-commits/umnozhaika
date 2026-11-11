@@ -15,6 +15,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.os.PowerManager
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.provider.Settings
@@ -31,12 +32,21 @@ class LockService : Service(), LockOverlay.Host {
     private var overlay: LockOverlay? = null
     private var lastText = ""
     private var warnedFor = -1L
-    private var screenOn = true
+    private val screenOn: Boolean
+        get() = try {
+            getSystemService(PowerManager::class.java).isInteractive
+        } catch (e: Exception) {
+            true
+        }
 
+    // Проверка идёт всегда: раз в секунду при включённом экране, раз в 15 секунд при выключенном.
     private val tick = object : Runnable {
         override fun run() {
-            evaluate()
-            if (screenOn) handler.postDelayed(this, 1000)
+            try {
+                evaluate()
+            } catch (e: Exception) {
+            }
+            if (prefs.enabled) handler.postDelayed(this, if (screenOn) 1000L else 15_000L)
         }
     }
 
@@ -44,12 +54,9 @@ class LockService : Service(), LockOverlay.Host {
         override fun onReceive(c: Context, i: Intent) {
             when (i.action) {
                 Intent.ACTION_SCREEN_OFF -> {
-                    screenOn = false
-                    handler.removeCallbacks(tick)
                     overlay?.resetToMenu()
                 }
                 Intent.ACTION_SCREEN_ON, Intent.ACTION_USER_PRESENT -> {
-                    screenOn = true
                     restartTick()
                 }
                 else -> restartTick()
@@ -61,6 +68,7 @@ class LockService : Service(), LockOverlay.Host {
 
     override fun onCreate() {
         super.onCreate()
+        isRunning = true
         prefs = Prefs(this)
         createChannel()
         val n = buildNotification("Умножайка следит за временем")
@@ -80,6 +88,7 @@ class LockService : Service(), LockOverlay.Host {
         } else {
             registerReceiver(receiver, f)
         }
+        Watchdog.schedule(this)
         restartTick()
     }
 
@@ -88,7 +97,15 @@ class LockService : Service(), LockOverlay.Host {
         return START_STICKY
     }
 
+    /** Приложение смахнули из списка недавних — поднимаемся через пару секунд. */
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        if (prefs.enabled) Watchdog.schedule(this, 1500L)
+        super.onTaskRemoved(rootIntent)
+    }
+
     override fun onDestroy() {
+        isRunning = false
+        if (prefs.enabled) Watchdog.schedule(this, 2000L)
         handler.removeCallbacksAndMessages(null)
         try {
             unregisterReceiver(receiver)
@@ -108,6 +125,7 @@ class LockService : Service(), LockOverlay.Host {
         if (!prefs.enabled) {
             overlay?.hide()
             overlay = null
+            Watchdog.cancel(this)
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
             return
@@ -126,6 +144,7 @@ class LockService : Service(), LockOverlay.Host {
         }
 
         val text = when {
+            locked && !Settings.canDrawOverlays(this) -> "⚠ Нет разрешения «поверх других окон» — замок не показывается!"
             locked -> "Телефон заблокирован — нужно решить примеры"
             free > 0 && active -> "Открыто ещё ${(free + 59_999) / 60_000} мин"
             else -> "Замок включится в ${Schedule.fmt(prefs.startMinutes)}"
@@ -229,6 +248,9 @@ class LockService : Service(), LockOverlay.Host {
     }
 
     companion object {
+        @Volatile
+        var isRunning = false
+
         const val CHANNEL = "lock"
         const val NOTIF_ID = 1
 

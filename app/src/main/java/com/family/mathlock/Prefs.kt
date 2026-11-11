@@ -212,7 +212,7 @@ class Prefs(context: Context) {
         val e = sp.edit()
         if (!same) {
             e.putString("day", d)
-            for (key in listOf("earned", "solved", "calls", "wrong", "pendingPenalty")) e.putInt(key, 0)
+            for (key in listOf("earned", "solved", "calls", "wrong", "pendingPenalty", "restarts")) e.putInt(key, 0)
         }
         val cur = if (same) getI(k, 0) else 0
         e.putInt(k, cur + delta)
@@ -226,6 +226,12 @@ class Prefs(context: Context) {
     }
 
     fun addCall() = bump("calls", 1)
+
+    /** Сколько раз за день сторож поднимал выгруженную службу. */
+    fun addRestart() = bump("restarts", 1)
+
+    val restartsToday: Int
+        get() = dayInt("restarts")
 
     fun addPenalty(minutes: Int) {
         bump("wrong", 1)

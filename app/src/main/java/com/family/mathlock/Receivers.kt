@@ -8,7 +8,10 @@ import android.content.Intent
 /** Запуск после перезагрузки и после обновления приложения. */
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        if (Prefs(context).enabled) LockService.start(context)
+        if (Prefs(context).enabled) {
+            LockService.start(context)
+            Watchdog.schedule(context)
+        }
     }
 }
 
