@@ -53,6 +53,15 @@ class Prefs(context: Context) {
         get() = getB("weekendAllDay", true)
         set(v) = putB("weekendAllDay", v)
 
+    /** Какие примеры давать: умножение и/или деление. */
+    var useMult: Boolean
+        get() = getB("useMult", true)
+        set(v) = putB("useMult", v)
+
+    var useDiv: Boolean
+        get() = getB("useDiv", true)
+        set(v) = putB("useDiv", v)
+
     var secondsPerQuestion: Int
         get() = getI("secPerQ", 10)
         set(v) = putI("secPerQ", v)
@@ -246,10 +255,12 @@ class Prefs(context: Context) {
         if (dailyLimitMinutes <= 0) Int.MAX_VALUE else maxOf(0, dailyLimitMinutes - earnedToday)
 
     // ---------- Слабые места: на каких примерах чаще ошибается ----------
-    fun mistakes(a: Int, b: Int): Int = getI("m_${a}_$b", 0)
+    private fun mistakeKey(p: Problem): String = (if (p.div) "d_" else "m_") + "${p.a}_${p.b}"
 
-    fun recordAnswer(a: Int, b: Int, correct: Boolean) {
-        val k = "m_${a}_$b"
+    fun mistakes(p: Problem): Int = getI(mistakeKey(p), 0)
+
+    fun recordAnswer(p: Problem, correct: Boolean) {
+        val k = mistakeKey(p)
         val cur = getI(k, 0)
         putI(k, if (correct) maxOf(0, cur - 1) else minOf(5, cur + 1))
     }

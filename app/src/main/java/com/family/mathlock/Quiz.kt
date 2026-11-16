@@ -2,9 +2,15 @@ package com.family.mathlock
 
 import kotlin.random.Random
 
-data class Problem(val a: Int, val b: Int) {
+/**
+ * Умножение: a × b = ?  Деление: (a·b) ÷ a = ?  (ответ — b, всегда без остатка).
+ */
+data class Problem(val a: Int, val b: Int, val div: Boolean = false) {
     val answer: Int
-        get() = a * b
+        get() = if (div) b else a * b
+
+    val text: String
+        get() = if (div) "${a * b} ÷ $a" else "$a × $b"
 }
 
 object Quiz {
@@ -16,7 +22,12 @@ object Quiz {
         val lo = prefs.minFactor
         val hi = maxOf(lo, prefs.maxFactor)
         val pool = ArrayList<Problem>()
-        for (a in lo..hi) for (b in lo..hi) pool.add(Problem(a, b))
+        val mult = prefs.useMult || !prefs.useDiv
+        val div = prefs.useDiv
+        for (a in lo..hi) for (b in lo..hi) {
+            if (mult) pool.add(Problem(a, b, false))
+            if (div) pool.add(Problem(a, b, true))
+        }
 
         val result = ArrayList<Problem>()
         val used = HashSet<Problem>()
@@ -26,7 +37,7 @@ object Quiz {
                 used.clear()
                 candidates = pool
             }
-            val weights = candidates.map { 1.0 + 2.0 * prefs.mistakes(it.a, it.b) }
+            val weights = candidates.map { 1.0 + 2.0 * prefs.mistakes(it) }
             var r = rnd.nextDouble() * weights.sum()
             var pick = candidates.last()
             for (i in candidates.indices) {

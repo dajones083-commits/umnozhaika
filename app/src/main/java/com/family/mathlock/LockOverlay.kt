@@ -331,7 +331,7 @@ class LockOverlay(base: Context, private val prefs: Prefs, private val host: Hos
         val p = problems[index]
         progressText.text = "Пример ${index + 1} из ${problems.size}"
         rewardText.text = "Награда: ${rewardFor(chosenMinutes)} мин"
-        questionText.text = "${p.a} × ${p.b}"
+        questionText.text = p.text
         input.setLength(0)
         answerText.text = "?"
         answerText.setTextColor(C.ACCENT)
@@ -376,7 +376,7 @@ class LockOverlay(base: Context, private val prefs: Prefs, private val host: Hos
     private fun onCorrect() {
         stopTimer()
         val p = problems[index]
-        prefs.recordAnswer(p.a, p.b, true)
+        prefs.recordAnswer(p, true)
         answerText.setTextColor(C.GREEN)
         index++
         if (index >= problems.size) {
@@ -391,7 +391,7 @@ class LockOverlay(base: Context, private val prefs: Prefs, private val host: Hos
 
     private fun onWrong() {
         val p = problems[index]
-        prefs.recordAnswer(p.a, p.b, false)
+        prefs.recordAnswer(p, false)
         prefs.addPenalty(prefs.penaltyMinutes)
         if (prefs.wrongResets) {
             onFail(timeout = false)
@@ -412,14 +412,14 @@ class LockOverlay(base: Context, private val prefs: Prefs, private val host: Hos
     private fun onFail(timeout: Boolean) {
         stopTimer()
         val p = problems[index]
-        if (timeout) prefs.recordAnswer(p.a, p.b, false)
+        if (timeout) prefs.recordAnswer(p, false)
 
         val col = column()
         col.addView(spacer())
         col.addView(ctx.label(if (timeout) "⏰" else "❌", 64f))
         col.addView(ctx.label(if (timeout) "Время вышло!" else "Неправильно!", 30f, bold = true), wrap(top = 8))
         col.addView(ctx.label("Запомни:", 18f, C.LIGHT), wrap(top = 24))
-        col.addView(ctx.label("${p.a} × ${p.b} = ${p.answer}", 52f, C.ACCENT, bold = true), wrap(top = 4))
+        col.addView(ctx.label("${p.text} = ${p.answer}", 52f, C.ACCENT, bold = true), wrap(top = 4))
         val penaltyLine = if (!timeout && prefs.penaltyMinutes > 0) "Штраф −${prefs.penaltyMinutes} мин. " else ""
         col.addView(
             ctx.label("${penaltyLine}Начинаем сначала.\nТеперь награда: ${rewardFor(chosenMinutes)} мин", 18f, C.LIGHT),

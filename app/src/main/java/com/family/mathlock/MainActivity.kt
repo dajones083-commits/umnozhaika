@@ -52,6 +52,8 @@ class MainActivity : Activity() {
     private lateinit var endBtn: Button
     private lateinit var weekendCb: CheckBox
     private lateinit var wrongCb: CheckBox
+    private lateinit var multCb: CheckBox
+    private lateinit var divCb: CheckBox
     private lateinit var minField: EditText
     private lateinit var maxField: EditText
     private lateinit var secField: EditText
@@ -139,7 +141,7 @@ class MainActivity : Activity() {
         title.typeface = Typeface.DEFAULT_BOLD
         title.setTextColor(C.BG)
         col.addView(title)
-        note("Настройки для родителя. В заданные часы телефон блокируется — чтобы открыть его, ребёнок решает примеры на умножение.")
+        note("Настройки для родителя. В заданные часы телефон блокируется — чтобы открыть его, ребёнок решает примеры на умножение и деление.")
 
         statusText = note("")
         enableSwitch = Switch(this)
@@ -172,6 +174,8 @@ class MainActivity : Activity() {
         penaltyField = number("Штраф за неправильный ответ, минут", prefs.penaltyMinutes)
         durField = field("Варианты времени, минуты через запятую", prefs.durationsCsv, InputType.TYPE_CLASS_TEXT)
         limitField = number("Лимит в день, минут (0 = без лимита)", prefs.dailyLimitMinutes)
+        multCb = check("Примеры на умножение (7 × 8)", prefs.useMult)
+        divCb = check("Примеры на деление (56 ÷ 7)", prefs.useDiv)
         wrongCb = check("Неправильный ответ — начать все примеры заново", prefs.wrongResets)
 
         header("4. Родитель")
@@ -250,13 +254,14 @@ class MainActivity : Activity() {
     }
 
     private fun stats(): String {
-        val list = ArrayList<Triple<Int, Int, Int>>()
-        for (a in 1..20) for (b in 1..20) {
-            val m = prefs.mistakes(a, b)
-            if (m > 0) list.add(Triple(a, b, m))
+        val list = ArrayList<Pair<Problem, Int>>()
+        for (a in 1..20) for (b in 1..20) for (div in listOf(false, true)) {
+            val p = Problem(a, b, div)
+            val m = prefs.mistakes(p)
+            if (m > 0) list.add(p to m)
         }
-        val weak = list.sortedByDescending { it.third }.take(10)
-            .joinToString(", ") { "${it.first}×${it.second}" }
+        val weak = list.sortedByDescending { it.second }.take(10)
+            .joinToString(", ") { it.first.text.replace(" ", "") }
         return "Заработано минут: ${prefs.earnedToday}\n" +
             "Решено примеров: ${prefs.solvedToday}\n" +
             "Ошибок: ${prefs.mistakesToday}\n" +
@@ -311,6 +316,9 @@ class MainActivity : Activity() {
             .sorted()
         prefs.durationsCsv = (if (durs.isEmpty()) listOf(30) else durs).joinToString(",")
         prefs.dailyLimitMinutes = num(limitField, 0, 1440, 0)
+        if (!multCb.isChecked && !divCb.isChecked) multCb.isChecked = true
+        prefs.useMult = multCb.isChecked
+        prefs.useDiv = divCb.isChecked
         prefs.wrongResets = wrongCb.isChecked
         prefs.weekendAllDay = weekendCb.isChecked
         prefs.parentPhone = phoneField.text.toString().trim()
