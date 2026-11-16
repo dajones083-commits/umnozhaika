@@ -18,6 +18,7 @@ import android.os.PowerManager
 import android.provider.Settings
 import android.text.InputType
 import android.view.Gravity
+import android.view.View
 import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
@@ -33,6 +34,14 @@ class MainActivity : Activity() {
     private lateinit var prefs: Prefs
     private var built = false
     private var dialogShown = false
+    private var pinDialog: AlertDialog? = null
+
+    /** Родитель ввёл PIN в этом заходе. Сбрасывается, как только экран настроек уходит с переднего плана. */
+    private var unlocked = false
+
+    /** Мы сами открыли системный экран (разрешения и т.п.) — после возврата PIN не спрашиваем. */
+    private var awaitingSystemScreen = false
+    private var systemScreenAt = 0L
     private var ignoreSwitch = false
 
     private lateinit var col: LinearLayout
@@ -78,11 +87,36 @@ class MainActivity : Activity() {
             LockService.start(this)
             Watchdog.schedule(this)
         }
-        if (hasCode() && !prefs.recentlyAuthed()) {
+        val cameFromSystemScreen = awaitingSystemScreen &&
+            android.os.SystemClock.elapsedRealtime() - systemScreenAt < 10 * 60_000L
+        awaitingSystemScreen = false
+        // PIN без повторного ввода: только если вернулись с открытого нами системного экрана
+        // или PIN только что ввели на замке («Родитель» → «Настройки»), не больше 30 секунд назад.
+        if (hasCode() && !unlocked && !(cameFromSystemScreen && built) && !prefs.authedWithin(30_000L)) {
+            hideUi()
             if (!dialogShown) askPin()
             return
         }
+        unlocked = true
         showUi()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        if (awaitingSystemScreen || isChangingConfigurations) return
+        // Ушли с экрана (звонок, «Домой», другое приложение) — настройки закрываются.
+        unlocked = false
+        pinDialog?.dismiss()
+        pinDialog = null
+        dialogShown = false
+        if (hasCode()) hideUi()
+    }
+
+    private fun hideUi() {
+        if (built) {
+            setContentView(View(this))
+            built = false
+        }
     }
 
     private fun showUi() {
@@ -100,7 +134,7 @@ class MainActivity : Activity() {
         et.hint = "PIN"
         et.gravity = Gravity.CENTER
         val locked = prefs.pinLockedMs()
-        AlertDialog.Builder(this)
+        pinDialog = AlertDialog.Builder(this)
             .setTitle("Код родителя")
             .setMessage(
                 if (locked > 0) "Слишком много попыток. Подождите ${locked / 1000 + 1} сек."
@@ -110,7 +144,9 @@ class MainActivity : Activity() {
             .setCancelable(false)
             .setPositiveButton("Войти") { _, _ ->
                 dialogShown = false
+                pinDialog = null
                 if (prefs.tryPin(et.text.toString().trim())) {
+                    unlocked = true
                     showUi()
                 } else {
                     toast("Неверный код")
@@ -119,6 +155,7 @@ class MainActivity : Activity() {
             }
             .setNegativeButton("Выход") { _, _ ->
                 dialogShown = false
+                pinDialog = null
                 finish()
             }
             .show()
@@ -152,13 +189,15 @@ class MainActivity : Activity() {
 
         header("1. Разрешения (все должны быть ✅)")
         permOverlay = action("") {
-            startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
+            safeStart(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
         }
         permNotif = action("") { requestNotif() }
         permBattery = action("") { requestBattery() }
         permAdmin = action("") { requestAdmin() }
         permTime = action("") { safeStart(Intent(Settings.ACTION_DATE_SETTINGS)) }
-        permInstall = action("") { Updater.openInstallPermission(this) }
+        permInstall = action("") {
+            safeStart(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName")))
+        }
         autostartBtn = action("🔁 Автозапуск в фоне (${Build.MANUFACTURER}) — включите вручную") { openAutostart() }
 
         header("2. Расписание")
@@ -421,9 +460,12 @@ class MainActivity : Activity() {
     private fun hasCode(): Boolean = prefs.pin.isNotEmpty() || prefs.secretCode.isNotEmpty()
 
     private fun safeStart(i: Intent): Boolean = try {
+        awaitingSystemScreen = true
+        systemScreenAt = android.os.SystemClock.elapsedRealtime()
         startActivity(i)
         true
     } catch (e: Exception) {
+        awaitingSystemScreen = false
         false
     }
 

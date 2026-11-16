@@ -150,6 +150,12 @@ class Prefs(context: Context) {
         sp.edit().putLong("pinOkAt", SystemClock.elapsedRealtime()).apply()
     }
 
+    /** PIN вводили не раньше чем [ms] миллисекунд назад. */
+    fun authedWithin(ms: Long): Boolean {
+        val t = sp.getLong("pinOkAt", -1L)
+        return t > 0 && SystemClock.elapsedRealtime() - t in 0L..ms
+    }
+
     /** PIN вводили в последние 5 минут. */
     fun recentlyAuthed(): Boolean {
         val t = sp.getLong("pinOkAt", -1L)
